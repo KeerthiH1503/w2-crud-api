@@ -1,10 +1,18 @@
-// index.js — Stage 0: Hello, server
+// index.js — Stage 1: root and health endpoints
 const express = require("express");
 const app = express();
 const PORT = 3000;
 
 app.get("/", (req, res) => {
-  res.send("Hello from Task API!");
+  res.json({
+    name: "Task API",
+    version: "1.0",
+    endpoints: ["/tasks"],
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
 });
 
 app.listen(PORT, () => {
