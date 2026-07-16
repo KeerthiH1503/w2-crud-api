@@ -1,0 +1,5 @@
+node_modules/
+server.log
+index.full.js.bak
+openapi.full.json.bak
+.DS_Store
