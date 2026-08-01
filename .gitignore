@@ -1,5 +1,7 @@
 node_modules/
 server.log
-index.full.js.bak
-openapi.full.json.bak
+tasks.db
+tasks.db-journal
+tasks.db-wal
+tasks.db-shm
 .DS_Store

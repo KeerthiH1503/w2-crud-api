@@ -7,6 +7,12 @@ const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiDocument = require("./openapi.json");
 
+// W3 · A1 — Connecting to the database.
+// Requiring db.js opens (and if needed creates) tasks.db, creates the
+// tasks table if it's missing, and seeds 3 example tasks only the
+// first time the table is empty.
+const db = require("./db");
+
 const app = express();
 const PORT = 3000;
 
