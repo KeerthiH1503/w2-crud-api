@@ -119,8 +119,7 @@ returned only the completed tasks, e.g. `3 | Walk the dog | 1` — and the
 same result appeared instantly through `GET /tasks?done=true` with no
 server restart, since the API and DB Browser read the exact same file.
 
-*(DB Browser screenshot — add a screenshot of `tasks.db` open in DB Browser
-here, e.g. `![DB Browser](db-browser-screenshot.png)`)*
+![DB Browser](db-browser-screenshot.png)
 
 ## Persistence proof (the "un-mortality" experiment)
 
