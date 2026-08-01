@@ -57,43 +57,57 @@ app.get("/health", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Stage 2 — Read: list and single task
-// (+ optional extras: ?done=, ?search=, ?limit=&offset= query params)
+// Helper: SQLite stores done as 0/1 — turn a row back into the same
+// { id, title, done: boolean } shape the API has always returned.
+// ---------------------------------------------------------------------------
+function toApiTask(row) {
+  return { id: row.id, title: row.title, done: !!row.done };
+}
+
+// ---------------------------------------------------------------------------
+// Stage 1 (W3) — Read: list and single task, now backed by SQL queries
+// (+ optional extras: ?done=, ?search=, ?limit=&offset= — also done in SQL)
 // ---------------------------------------------------------------------------
 app.get("/tasks", (req, res) => {
-  let result = tasks;
+  let sql = "SELECT * FROM tasks WHERE 1 = 1";
+  const params = [];
 
-  // Filtering: GET /tasks?done=true or ?done=false
+  // Filtering: GET /tasks?done=true or ?done=false — SQL WHERE clause
   if (req.query.done !== undefined) {
-    const wantDone = req.query.done === "true";
-    result = result.filter((t) => t.done === wantDone);
+    sql += " AND done = ?";
+    params.push(req.query.done === "true" ? 1 : 0);
   }
 
-  // Search: GET /tasks?search=milk (case-insensitive, matches the title)
+  // Search: GET /tasks?search=milk — SQL LIKE, parameterized (never
+  // glue user input directly into the query string)
   if (req.query.search) {
-    const term = req.query.search.toLowerCase();
-    result = result.filter((t) => t.title.toLowerCase().includes(term));
+    sql += " AND title LIKE ?";
+    params.push(`%${req.query.search}%`);
   }
+
+  sql += " ORDER BY id";
 
   // Pagination: GET /tasks?limit=2&offset=2
   if (req.query.limit !== undefined || req.query.offset !== undefined) {
+    const limit = req.query.limit !== undefined ? parseInt(req.query.limit, 10) : -1;
     const offset = parseInt(req.query.offset, 10) || 0;
-    const limit = req.query.limit !== undefined ? parseInt(req.query.limit, 10) : result.length;
-    result = result.slice(offset, offset + limit);
+    sql += " LIMIT ? OFFSET ?";
+    params.push(limit, offset);
   }
 
-  res.json(result);
+  const rows = db.prepare(sql).all(...params);
+  res.json(rows.map(toApiTask));
 });
 
 app.get("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
+  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
 
-  if (!task) {
+  if (!row) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
-  res.json(task);
+  res.json(toApiTask(row));
 });
 
 // ---------------------------------------------------------------------------
