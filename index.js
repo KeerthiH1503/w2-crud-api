@@ -111,7 +111,8 @@ app.get("/tasks/:id", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Stage 3 — Create: POST a new task
+// Stage 2 (W3) — Create: POST a new task, inserted into SQLite.
+// Same validation as A1: missing/empty title -> 400.
 // ---------------------------------------------------------------------------
 app.post("/tasks", (req, res) => {
   const { title } = req.body || {};
@@ -120,13 +121,12 @@ app.post("/tasks", (req, res) => {
     return res.status(400).json({ error: "title is required and cannot be empty" });
   }
 
-  const newTask = {
-    id: nextId++,
-    title: title.trim(),
-    done: false,
-  };
+  const result = db
+    .prepare("INSERT INTO tasks (title, done) VALUES (?, ?)")
+    .run(title.trim(), 0);
 
-  tasks.push(newTask);
+  // better-sqlite3 hands back the id SQLite just assigned.
+  const newTask = { id: result.lastInsertRowid, title: title.trim(), done: false };
   res.status(201).json(newTask);
 });
 
