@@ -1,7 +1,8 @@
 // index.js
-// A small in-memory CRUD "Task API" built with Express.
-// Stages 0-6 of the W2 · A1 assignment, plus a few optional extras
-// (filtering, search, /stats, /reset).
+// A CRUD "Task API" built with Express, backed by a SQLite database
+// (see db.js). Same endpoints as the W2 · A1 assignment — only the
+// storage layer changed for W3 · A1 — plus a few optional extras
+// (filtering, search, /stats, /reset), all done with SQL now.
 
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
@@ -21,18 +22,14 @@ const PORT = 3000;
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
-// "Database" — just an array living in memory. It resets every time the
-// server restarts. That's on purpose: Week 3 is where a real database shows
-// up to fix this.
+// The 3 example tasks. Used by db.js to seed tasks.db on first run, and
+// by POST /reset to restore a clean slate on demand.
 // ---------------------------------------------------------------------------
 const SEED_TASKS = [
-  { id: 1, title: "Buy milk", done: false },
-  { id: 2, title: "Read chapter 3", done: false },
-  { id: 3, title: "Walk the dog", done: true },
+  { title: "Buy milk", done: false },
+  { title: "Read chapter 3", done: false },
+  { title: "Walk the dog", done: true },
 ];
-
-let tasks = SEED_TASKS.map((t) => ({ ...t }));
-let nextId = tasks.length + 1;
 
 // ---------------------------------------------------------------------------
 // Stage 1 — root and health endpoints
@@ -131,13 +128,13 @@ app.post("/tasks", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Stage 4 — Update & Delete
+// Stage 3 (W3) — Update & Delete, now backed by SQL.
 // ---------------------------------------------------------------------------
 app.put("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
+  const existing = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
 
-  if (!task) {
+  if (!existing) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
@@ -155,37 +152,45 @@ app.put("/tasks/:id", (req, res) => {
     });
   }
 
-  if (title !== undefined) task.title = title.trim();
-  if (done !== undefined) task.done = done;
+  const newTitle = title !== undefined ? title.trim() : existing.title;
+  const newDone = done !== undefined ? (done ? 1 : 0) : existing.done;
 
-  res.json(task);
+  db.prepare("UPDATE tasks SET title = ?, done = ? WHERE id = ?").run(newTitle, newDone, id);
+
+  res.json({ id, title: newTitle, done: !!newDone });
 });
 
 app.delete("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const index = tasks.findIndex((t) => t.id === id);
+  const result = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
 
-  if (index === -1) {
+  if (result.changes === 0) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
-  tasks.splice(index, 1);
   res.status(204).send();
 });
 
 // ---------------------------------------------------------------------------
-// Optional extras
+// Optional extras — /stats now computed with SQL's COUNT() instead of
+// counting in JavaScript, and /reset re-seeds the database.
 // ---------------------------------------------------------------------------
 app.get("/stats", (req, res) => {
-  const total = tasks.length;
-  const done = tasks.filter((t) => t.done).length;
+  const { total } = db.prepare("SELECT COUNT(*) AS total FROM tasks").get();
+  const { done } = db.prepare("SELECT COUNT(*) AS done FROM tasks WHERE done = 1").get();
   res.json({ total, done, open: total - done });
 });
 
 app.post("/reset", (req, res) => {
-  tasks = SEED_TASKS.map((t) => ({ ...t }));
-  nextId = tasks.length + 1;
-  res.json({ message: "Tasks reset to the 3 seed examples", tasks });
+  const reseed = db.transaction(() => {
+    db.prepare("DELETE FROM tasks").run();
+    const insert = db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)");
+    for (const t of SEED_TASKS) insert.run(t.title, t.done ? 1 : 0);
+  });
+  reseed();
+
+  const rows = db.prepare("SELECT * FROM tasks ORDER BY id").all();
+  res.json({ message: "Tasks reset to the 3 seed examples", tasks: rows.map(toApiTask) });
 });
 
 // ---------------------------------------------------------------------------
