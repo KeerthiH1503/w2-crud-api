@@ -157,3 +157,74 @@ This repo has one commit per stage across both assignments — W2 · A1
 (Stage 0–6, in-memory CRUD) and W3 · A1 (Stage 0–5, SQLite migration).
 Clone it and run `npm install && npm start` — `tasks.db` is created and
 seeded automatically, no manual setup required.
+
+## W3 · A3 — Containerized stack (Postgres in Docker)
+
+The API now runs against **Postgres, containerized with Docker Compose**,
+alongside the SQLite version from A2. Both are implemented behind the same
+repository interface (`repositories/`), so `index.js` and every route are
+completely unchanged — only the storage layer underneath was swapped, exactly
+as A2 set out to prove.
+
+### Run the whole stack with one command
+
+```bash
+cp .env.example .env
+docker compose up
+```
+
+This starts Postgres (with a named volume, so data survives) and the app
+together. The app waits for Postgres's healthcheck before starting. On first
+boot, Postgres runs `db/init.sql` automatically, creating the `tasks` table
+and seeding 3 example tasks.
+
+- API: http://localhost:3000
+- Swagger UI: http://localhost:3000/docs
+- Postgres: localhost:5432 (user/pass/db from `.env`)
+
+### Architecture: repository interface
+
+```
+repositories/
+├── index.js                 # picks a driver based on DB_DRIVER / DATABASE_URL
+├── sqlite-repository.js     # A2's SQLite storage (fallback, zero setup)
+└── postgres-repository.js   # A3's Postgres storage (Docker)
+```
+
+Both files implement the exact same functions: `init`, `list`, `getById`,
+`create`, `update`, `remove`, `stats`, `reset`. `index.js` only ever calls
+`repositories/index.js` — it has no idea which database is actually behind
+it. Confirmed honestly: swapping `DB_DRIVER=sqlite` to `DB_DRIVER=postgres`
+required editing zero lines in `index.js` or any route.
+
+### `.env` / `.env.example`
+
+`.env` (git-ignored, real values) holds `DATABASE_URL`, the Postgres
+credentials, `DB_DRIVER`, and `PORT`. `.env.example` (committed) documents
+every variable with safe placeholder values so a clone knows exactly what to
+set — just `cp .env.example .env`.
+
+### Persistence proof
+
+Checked two ways:
+
+1. **Via the API** — created a task with `POST /tasks`, ran
+   `docker compose down` then `docker compose up` again (stopping and
+   restarting *both* the app container and the Postgres container), then
+   `GET /tasks` — the task was still there. Ran `docker compose up` a second
+   time after that and the 3 seed tasks were **not** duplicated, since
+   `init.sql` and the repository's own seed check both only insert when the
+   table is empty.
+2. **Via the database directly** — connected with `docker compose exec db
+   psql -U taskapi -d taskapi -c "SELECT * FROM tasks;"` and saw the same
+   rows the API returns, including the one created after a restart.
+
+### Fallback: running without Docker
+
+If Docker isn't available, the app still runs against SQLite exactly like
+A2, with zero setup:
+
+```bash
+npm install
+DB_DRIVER=sqlite npm start
+```
