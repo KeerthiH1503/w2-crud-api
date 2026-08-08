@@ -3,16 +3,26 @@
 // repository interface in repositories/ — routes never touch SQL or
 // a specific database driver directly. That's what makes swapping
 // SQLite for Postgres (A3) a one-file change instead of a rewrite.
+//
+// W2 · A4 — now also a secured API: Supabase Auth handles sign up,
+// log in, log out, and issuing JWTs; requireAuth (middleware/) verifies
+// those tokens and guards /protected/* and /auth/logout.
+
+require("dotenv").config();
 
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiDocument = require("./openapi.json");
 const repo = require("./repositories");
+const authRoutes = require("./routes/auth");
+const miscRoutes = require("./routes/misc");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use("/auth", authRoutes);
+app.use("/", miscRoutes);
 
 // ---------------------------------------------------------------------------
 app.get("/", (req, res) => {
@@ -169,6 +179,7 @@ repo
     app.listen(PORT, () => {
       console.log(`Task API listening on http://localhost:${PORT}`);
       console.log(`Swagger UI available at http://localhost:${PORT}/docs`);
+      console.log("Server running and connected to Supabase");
     });
   })
   .catch((err) => {
