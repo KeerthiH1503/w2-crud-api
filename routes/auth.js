@@ -4,7 +4,6 @@
 // stores a password or hashes anything itself.
 
 const express = require("express");
-const { createClient } = require("@supabase/supabase-js");
 const supabase = require("../supabaseClient");
 const requireAuth = require("../middleware/requireAuth");
 
@@ -75,9 +74,7 @@ router.post("/logout", requireAuth, async (req, res, next) => {
     // The shared `supabase` client has no session of its own — sign-out
     // needs a client that's carrying THIS request's token, so we build
     // one scoped to just this request instead of a bare token argument.
-    const scopedClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
-      global: { headers: { Authorization: `Bearer ${req.token}` } },
-    });
+    const scopedClient = supabase.createScopedClient(req.token);
 
     const { error } = await scopedClient.auth.signOut();
 
