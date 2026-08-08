@@ -228,3 +228,87 @@ A2, with zero setup:
 npm install
 DB_DRIVER=sqlite npm start
 ```
+
+## W2 · A4 — Auth: Login & protect (Supabase)
+
+The API is now secured. Supabase Auth is the Identity Provider — it stores
+accounts, hashes passwords, and signs JWTs. This server never stores a
+password or hashes anything itself; it only forwards credentials to
+Supabase and verifies the tokens Supabase hands back.
+
+### Setup
+
+1. Create a free project at [supabase.com](https://supabase.com) (no card).
+2. In the dashboard: **Project Settings → API**, copy the **Project URL**
+   and the **anon (public) key** — never the `service_role` key.
+3. In **Authentication → Sign In / Providers → Email**, turn off "Confirm
+   email" so a fresh signup can log in immediately (fine for a practice
+   project; you'd leave this on in production).
+4. `cp .env.example .env` and fill in `SUPABASE_URL` and `SUPABASE_KEY`
+   with your own project's values.
+5. `npm install && npm start` (or `DB_DRIVER=sqlite npm start` to skip
+   Docker/Postgres for this assignment — auth doesn't depend on which
+   task storage backend is active).
+
+Checkpoint: the server logs `Server running and connected to Supabase`
+with no errors.
+
+### Endpoints
+
+| Method | Path | Auth required | Description |
+|---|---|---|---|
+| POST | `/auth/signup` | none | Create a new user account (Supabase) |
+| POST | `/auth/login` | none | Authenticate, returns `access_token` + `refresh_token` |
+| POST | `/auth/logout` | **Bearer token** | Ends the session |
+| GET | `/public/info` | none | Open, unprotected data |
+| GET | `/protected/profile` | **Bearer token** | The logged-in user's own profile |
+| GET | `/protected/dashboard` | **Bearer token** | Second protected route — proves the same middleware guards more than one route |
+
+Status codes: `201` signup · `200` login/read · `204` logout · `400`
+missing/invalid input · `401` missing, malformed, or invalid/expired token.
+
+### How the guard works
+
+`middleware/requireAuth.js` extracts the token from
+`Authorization: Bearer <token>`, calls `supabase.auth.getUser(token)` to
+verify it against Supabase, and either attaches `req.user` and calls
+`next()`, or returns `401`. It's applied to `/protected/profile`,
+`/protected/dashboard`, and `/auth/logout` — the same function, three
+routes, zero duplicated auth logic.
+
+### Try it
+
+```bash
+# 1. Sign up
+curl -i -X POST http://localhost:3000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+
+# 2. Log in — copy the access_token from the response
+curl -i -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+
+# 3. Call a protected route with it
+curl -i http://localhost:3000/protected/profile \
+  -H "Authorization: Bearer <PASTE_ACCESS_TOKEN_HERE>"
+
+# 4. Tamper with one character of the token and re-run — expect 401
+```
+
+Or use Swagger UI at `/docs`: click **Authorize**, paste the access
+token, then "Try it out" on `/protected/profile` directly from the
+browser.
+
+![Swagger UI with auth](swagger-auth-screenshot.png)
+
+### Security notes
+
+- `.env` is git-ignored; only `.env.example` (placeholder values) is
+  committed. No Supabase keys exist anywhere in this repo's git history.
+- Only the **anon** key is used — it's safe to ship in client code and
+  cannot bypass Supabase's row-level security. The `service_role` key is
+  never used here.
+- Logout signs out the session tied to *that specific token*, via a
+  request-scoped Supabase client — it doesn't affect other logged-in
+  sessions for the same user on other devices.
